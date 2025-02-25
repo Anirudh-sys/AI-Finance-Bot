@@ -1,25 +1,36 @@
-# AI Finance Bot
+# AI-Powered Stock Comparison Tool
 
-This project is designed to provide financial insights and analytics using AI technologies.
-
-## Features
-
-- Feature 1
-- Feature 2
-- Feature 3
+## Description
+This is a Streamlit application that allows users to compare stocks using AI analysis, historical data visualization, and news aggregation. Users can input stock symbols and receive detailed insights, including price charts, fundamental metrics, and recent news.
 
 ## Installation
+To run this application, you need to install the required dependencies. You can do this by running:
 
-Instructions for installing the project.
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
+1. Clone the repository or download the files.
+2. Create a `.env` file in the root directory and add your API keys:
+   ```
+   FINNHUB_API_KEY=your_finnhub_api_key
+   GOOGLE_API_KEY=your_google_api_key
+   ```
+3. Run the application using Streamlit:
+   ```bash
+   streamlit run Finance-App.py
+   ```
+4. Open your web browser and navigate to the provided local URL.
 
-Instructions for using the project.
+## Dependencies
+- Streamlit
+- yfinance
+- pandas
+- plotly
+- finnhub
+- google.generativeai
+- python-dotenv
 
-## Contributing
-
-Guidelines for contributing to the project.
-
-## License
-
-Information about the project's license.
+## Acknowledgments
+- Powered by Google Gemini, Yahoo Finance, and Finnhub.
