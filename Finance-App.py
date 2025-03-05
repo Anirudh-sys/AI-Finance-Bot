@@ -46,7 +46,7 @@ def get_stock_data(symbol):
 def get_stock_news(symbol):
     """Fetch recent news for a stock using Finnhub."""
     try:
-        news = finnhub_client.company_news(
+        news = finnhub_api_key.company_news(
             symbol,
             _from=(datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
             to=datetime.now().strftime("%Y-%m-%d"),
