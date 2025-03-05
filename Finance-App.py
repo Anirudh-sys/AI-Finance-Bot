@@ -17,7 +17,7 @@ google_api_key = os.getenv("GOOGLE_API_KEY")
 
 # Configure Google Gemini
 genai.configure(api_key=google_api_key)
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("Gemini 1.5 Flash")
 
 # Initialize session state variables
 if "chat_history" not in st.session_state:
