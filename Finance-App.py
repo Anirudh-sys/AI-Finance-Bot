@@ -11,13 +11,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Fetch API keys from Render's Environment Variables
-finnhub_api_key = os.getenv("FINNHUB_API_KEY")
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# Initialize Finnhub client
+finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
 
 # Configure Google Gemini
-genai.configure(api_key=google_api_key)
-model = genai.GenerativeModel("Gemini 1.5 Flash")
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Initialize session state variables
 if "chat_history" not in st.session_state:
@@ -46,7 +45,7 @@ def get_stock_data(symbol):
 def get_stock_news(symbol):
     """Fetch recent news for a stock using Finnhub."""
     try:
-        news = finnhub_api_key.company_news(
+        news = finnhub_client.company_news(
             symbol,
             _from=(datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
             to=datetime.now().strftime("%Y-%m-%d"),
@@ -322,4 +321,3 @@ if st.session_state.stock1_data:
                 response = generate_chat_response(q)
                 st.session_state.chat_history.append({"role": "ai", "content": response})
             st.rerun()
-
