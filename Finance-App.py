@@ -12,10 +12,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize Finnhub client
-finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
-
+finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
 # Configure Google Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("gemini-2.0-flash")
 
 # Initialize session state variables
