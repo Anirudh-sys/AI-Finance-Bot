@@ -16,7 +16,7 @@ finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
 
 # Configure Google Gemini
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel("gemini-pro")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 # Initialize session state variables
 if "chat_history" not in st.session_state:
@@ -31,46 +31,16 @@ if "stock2_symbol" not in st.session_state:
     st.session_state.stock2_symbol = ""
 
 # Helper Functions
-import time
-import requests
-
-import time
-import requests
-
 def get_stock_data(symbol):
-    """Fetch stock data using Finnhub instead of yfinance."""
+    """Fetch stock data using yfinance."""
     try:
-        stock_quote = finnhub_client.quote(symbol)
-        company_profile = finnhub_client.company_profile2(symbol=symbol)
-
-        if not stock_quote or stock_quote == {}:
-            raise ValueError(f"Error fetching stock price for {symbol}. API may be down or symbol may be incorrect.")
-
-        if not company_profile or company_profile == {}:
-            raise ValueError(f"Error fetching company profile for {symbol}. API may be down or symbol may be incorrect.")
-
-        stock_info = {
-            "symbol": symbol,
-            "current_price": stock_quote.get("c", "N/A"),
-            "high_price": stock_quote.get("h", "N/A"),
-            "low_price": stock_quote.get("l", "N/A"),
-            "open_price": stock_quote.get("o", "N/A"),
-            "previous_close": stock_quote.get("pc", "N/A"),
-            "market_cap": company_profile.get("marketCapitalization", "N/A"),
-            "sector": company_profile.get("finnhubIndustry", "N/A"),
-            "company_name": company_profile.get("name", "N/A"),
-            "exchange": company_profile.get("exchange", "N/A"),
-            "country": company_profile.get("country", "N/A"),
-            "website": company_profile.get("weburl", "N/A"),
-        }
-
-        return stock_info
-
+        stock = yf.Ticker(symbol)
+        if not stock.info:
+            raise ValueError(f"No data found for symbol: {symbol}")
+        return stock
     except Exception as e:
-        st.error(f"Error fetching data for {symbol}: {str(e)}. Please ensure the symbol is correct and try again.")
+        st.error(f"Error fetching data for {symbol}: {str(e)}")
         return None
-
-
 
 def get_stock_news(symbol):
     """Fetch recent news for a stock using Finnhub."""
@@ -85,70 +55,58 @@ def get_stock_news(symbol):
         st.error(f"Error fetching news for {symbol}: {str(e)}")
         return []
 
-def create_price_chart(stock_data, stock_symbol):
-    """Create a valid candlestick chart using stock data from Finnhub."""
+def create_price_chart(stock_data, symbol):
+    """Create a candlestick chart for the stock."""
     try:
-        # Ensure stock_data contains valid price values
-        open_price = stock_data.get("open_price")
-        high_price = stock_data.get("high_price")
-        low_price = stock_data.get("low_price")
-        close_price = stock_data.get("current_price")
-
-        if None in [open_price, high_price, low_price, close_price]:
-            raise ValueError("Missing stock price values.")
-
-        fig = go.Figure(data=[
-            go.Candlestick(
-                x=["Open", "High", "Low", "Close"],
-                open=[open_price, open_price, open_price, open_price],
-                high=[high_price, high_price, high_price, high_price],
-                low=[low_price, low_price, low_price, low_price],
-                close=[close_price, close_price, close_price, close_price]
-            )
-        ])
-
+        hist = stock_data.history(period="1y")
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=hist.index,
+                    open=hist["Open"],
+                    high=hist["High"],
+                    low=hist["Low"],
+                    close=hist["Close"],
+                )
+            ]
+        )
         fig.update_layout(
-            title=f"{stock_symbol} Stock Price",
-            xaxis_title="Stock Metrics",
+            title=f"{symbol} Stock Price - Last Year",
+            xaxis_title="Date",
             yaxis_title="Price",
         )
-        return fig  # ✅ Returns a valid Plotly figure
-
+        return fig
     except Exception as e:
-        st.error(f"Error creating chart for {stock_symbol}: {str(e)}")
-        return go.Figure()  # ✅ Returns an empty figure if an error occurs
-def format_number(value):
-    if isinstance(value, (int, float)):
-        return f"${value:,.0f}"
-    return value  # Return "N/A" or any string as-is
+        st.error(f"Error creating chart for {symbol}: {str(e)}")
+        return None
 
 def get_ai_analysis(stock1_data, stock2_data, stock1_symbol, stock2_symbol):
     """Generate AI analysis for two stocks."""
     try:
         stock1_info = {
             "symbol": stock1_symbol,
-            "market_cap": stock1_data.get("marketCap", "N/A"),
-            "pe_ratio": stock1_data.get("trailingPE", "N/A"),
-            "price": stock1_data.get("currentPrice", "N/A"),
-            "52w_high": stock1_data.get("fiftyTwoWeekHigh", "N/A"),
-            "52w_low": stock1_data.get("fiftyTwoWeekLow", "N/A"),
-            "forward_pe": stock1_data.get("forwardPE", "N/A"),
-            "dividend_yield": stock1_data.get("dividendYield", 0) * 100,
-            "sector": stock1_data.get("sector", "N/A"),
-            "beta": stock1_data.get("beta", "N/A"),
+            "market_cap": stock1_data.info.get("marketCap", "N/A"),
+            "pe_ratio": stock1_data.info.get("trailingPE", "N/A"),
+            "price": stock1_data.info.get("currentPrice", "N/A"),
+            "52w_high": stock1_data.info.get("fiftyTwoWeekHigh", "N/A"),
+            "52w_low": stock1_data.info.get("fiftyTwoWeekLow", "N/A"),
+            "forward_pe": stock1_data.info.get("forwardPE", "N/A"),
+            "dividend_yield": stock1_data.info.get("dividendYield", 0) * 100,
+            "sector": stock1_data.info.get("sector", "N/A"),
+            "beta": stock1_data.info.get("beta", "N/A"),
         }
 
         stock2_info = {
             "symbol": stock2_symbol,
-            "market_cap": stock2_data.get("marketCap", "N/A"),
-            "pe_ratio": stock2_data.get("trailingPE", "N/A"),
-            "price": stock2_data.get("currentPrice", "N/A"),
-            "52w_high": stock2_data.get("fiftyTwoWeekHigh", "N/A"),
-            "52w_low": stock2_data.get("fiftyTwoWeekLow", "N/A"),
-            "forward_pe": stock2_data.get("forwardPE", "N/A"),
-            "dividend_yield": stock2_data.get("dividendYield", 0) * 100,
-            "sector": stock2_data.get("sector", "N/A"),
-            "beta": stock2_data.get("beta", "N/A"),
+            "market_cap": stock2_data.info.get("marketCap", "N/A"),
+            "pe_ratio": stock2_data.info.get("trailingPE", "N/A"),
+            "price": stock2_data.info.get("currentPrice", "N/A"),
+            "52w_high": stock2_data.info.get("fiftyTwoWeekHigh", "N/A"),
+            "52w_low": stock2_data.info.get("fiftyTwoWeekLow", "N/A"),
+            "forward_pe": stock2_data.info.get("forwardPE", "N/A"),
+            "dividend_yield": stock2_data.info.get("dividendYield", 0) * 100,
+            "sector": stock2_data.info.get("sector", "N/A"),
+            "beta": stock2_data.info.get("beta", "N/A"),
         }
 
         prompt = f"""
@@ -183,54 +141,42 @@ def get_ai_analysis(stock1_data, stock2_data, stock1_symbol, stock2_symbol):
     except Exception as e:
         return f"Analysis error: {str(e)}"
 
-
 def generate_chat_response(prompt):
     """Generate AI response for chat conversations."""
     try:
-        stock1 = st.session_state.stock1_data
-        stock2 = st.session_state.stock2_data
+        stock1 = st.session_state.stock1_data.info
+        stock2 = st.session_state.stock2_data.info
         
-        # Handle market cap formatting
-        def format_market_cap(value):
-            if isinstance(value, (int, float)):
-                return f"${value:,.0f}"  # Format as currency with commas, no decimals
-            return f"${value}"  # Just add $ if it's not a number (like 'N/A')
-        
-        # Format all values separately before string interpolation
-        market_cap1 = format_market_cap(stock1.get('market_cap', 'N/A'))  
-        market_cap2 = format_market_cap(stock2.get('market_cap', 'N/A'))  
-        
-        # Use pre-formatted values in the f-string
         context = f"""
-            Analyzing {st.session_state.stock1_symbol} ({stock1.get('shortName', '')}) 
-            vs {st.session_state.stock2_symbol} ({stock2.get('shortName', '')}).
-
-            Key Metrics:
-            - {st.session_state.stock1_symbol}: 
-              P/E {stock1.get('trailingPE', 'N/A')}, 
-              Market Cap {market_cap1}, 
-              Beta {stock1.get('beta', 'N/A')}
-
-            - {st.session_state.stock2_symbol}: 
-              P/E {stock2.get('trailingPE', 'N/A')}, 
-              Market Cap {market_cap2}, 
-              Beta {stock2.get('beta', 'N/A')}
-            """
+        Analyzing {st.session_state.stock1_symbol} ({stock1.get('shortName', '')}) 
+        vs {st.session_state.stock2_symbol} ({stock2.get('shortName', '')}).
+        
+        Key Metrics:
+        - {st.session_state.stock1_symbol}: 
+          P/E {stock1.get('trailingPE', 'N/A')}, 
+          Market Cap ${stock1.get('marketCap', 'N/A'):,}, 
+          Beta {stock1.get('beta', 'N/A')}
+          
+        - {st.session_state.stock2_symbol}: 
+          P/E {stock2.get('trailingPE', 'N/A')}, 
+          Market Cap ${stock2.get('marketCap', 'N/A'):,}, 
+          Beta {stock2.get('beta', 'N/A')}
+        """
 
         full_prompt = f"""
-            {context}
-
-            As a financial expert, answer this question: 
-            {prompt}
-
-            Guidelines:
-            - Be specific to these companies
-            - Compare key metrics
-            - Highlight risks and opportunities
-            - Maintain professional tone
-            - Use bullet points when appropriate
-            """
-
+        {context}
+        
+        As a financial expert, answer this question: 
+        {prompt}
+        
+        Guidelines:
+        - Be specific to these companies
+        - Compare key metrics
+        - Highlight risks and opportunities
+        - Maintain professional tone
+        - Use bullet points when appropriate
+        """
+        
         response = model.generate_content(full_prompt)
         return response.text if response else "Couldn't generate response"
     except Exception as e:
@@ -243,7 +189,7 @@ st.title("🤖 AI-Powered Stock Comparison Tool")
 # Stock Input Section
 col1, col2 = st.columns(2)
 with col1:
-    stock1 = st.text_input("First Stock Symbol:", "AAPL").upper()
+    stock1 = st.text_input("First Stock Symbol:", "NVDA").upper()
 with col2:
     stock2 = st.text_input("Second Stock Symbol:", "MSFT").upper()
 
@@ -287,50 +233,58 @@ if st.session_state.stock1_data and st.session_state.stock2_data:
 
     with tab3:
         col1, col2 = st.columns(2)
-
         metrics = [
-        ('current_price', 'Price', '${:.2f}'),
-        ('market_cap', 'Market Cap', '${:,.0f}B'),
-        ('open_price', 'Opening Price', '${:.2f}'),
-        ('high_price', 'High Price', '${:.2f}'),
-        ('low_price', 'Low Price', '${:.2f}'),
-        ('sector', 'Sector', '{}'),
+            ('currentPrice', 'Price', '${:.2f}'),
+            ('marketCap', 'Market Cap', '${:,.0f}'),
+            ('trailingPE', 'P/E Ratio', '{:.2f}'),
+            ('forwardPE', 'Forward P/E', '{:.2f}'),
+            ('beta', 'Beta', '{:.2f}'),
+            ('dividendYield', 'Dividend Yield', '{:.2%}'),
+            ('fiftyTwoWeekHigh', '52W High', '${:.2f}'),
+            ('fiftyTwoWeekLow', '52W Low', '${:.2f}'),
         ]
+        for metric in metrics:
+            with col1:
+                val = st.session_state.stock1_data.info.get(metric[0])
+                st.metric(
+                    label=f"{st.session_state.stock1_symbol} {metric[1]}",
+                    value=metric[2].format(val) if val else 'N/A'
+                )
+            with col2:
+                val = st.session_state.stock2_data.info.get(metric[0])
+                st.metric(
+                    label=f"{st.session_state.stock2_symbol} {metric[1]}",
+                    value=metric[2].format(val) if val else 'N/A'
+                )
 
-    for metric in metrics:
-        with col1:
-            val = st.session_state.stock1_data.get(metric[0], "N/A")
-            st.metric(
-                label=f"{st.session_state.stock1_symbol} {metric[1]}",
-                value=metric[2].format(val) if val != "N/A" else "N/A"
-            )
-        with col2:
-            val = st.session_state.stock2_data.get(metric[0], "N/A")
-            st.metric(
-                label=f"{st.session_state.stock2_symbol} {metric[1]}",
-                value=metric[2].format(val) if val != "N/A" else "N/A"
-            )
-
-
-    with tab4:
+    with tab4:  # News Tab - FIXED
         col1, col2 = st.columns(2)
         with col1:
             st.subheader(f"{st.session_state.stock1_symbol} News")
-            for article in get_stock_news(st.session_state.stock1_symbol):
-                st.markdown(f"**{article['headline']}**")
-                st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
-                st.write(article['summary'])
-                st.divider()
+            news1 = get_stock_news(st.session_state.stock1_symbol)
+            if news1: # Check if news were retrieved
+                for article in news1:
+                    st.markdown(f"{article['headline']}")
+                    st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
+                    st.write(article['summary'])
+                    st.divider()
+            else:
+                st.write(f"No news found for {st.session_state.stock1_symbol}") # Inform user if no news
+
         with col2:
             st.subheader(f"{st.session_state.stock2_symbol} News")
-            for article in get_stock_news(st.session_state.stock2_symbol):
-                st.markdown(f"**{article['headline']}**")
-                st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
-                st.write(article['summary'])
-                st.divider()
+            news2 = get_stock_news(st.session_state.stock2_symbol)
+            if news2: # Check if news were retrieved
+                for article in news2:
+                    st.markdown(f"{article['headline']}")
+                    st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
+                    st.write(article['summary'])
+                    st.divider()
+            else:
+                st.write(f"No news found for {st.session_state.stock2_symbol}") # Inform user if no news
 
     with tab5:
-        st.subheader("Chat with Financial AI")
+        st.subheader("Chat with AI")
         
         # Chat history
         for msg in st.session_state.chat_history:
@@ -368,6 +322,3 @@ if st.session_state.stock1_data:
                 st.session_state.chat_history.append({"role": "ai", "content": response})
             st.rerun()
 
-# Footer
-st.markdown("---")
-st.caption("Powered by Google Gemini, Yahoo Finance, and Finnhub | Created with Streamlit")
