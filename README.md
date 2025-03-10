@@ -60,3 +60,4 @@ The AI Finance Bot utilizes **Google Gemini 2.0 Flash**, a large language model 
    ```bash  
    streamlit run Finance-App.py  
    ```  
+"# AI-Finance-Bot" 
