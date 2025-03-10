@@ -6,16 +6,26 @@ from datetime import datetime, timedelta
 import finnhub
 import google.generativeai as genai
 import os
-from dotenv import load_dotenv
+import requests
 
-# Load environment variables
-load_dotenv()
+# Read API keys securely
+finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
+google_api_key = st.secrets["GOOGLE_API_KEY"]
 
-# Initialize Finnhub client
-finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
+def fetch_stock_data(symbol):
+    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={finnhub_api_key}"
+    
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Error {response.status_code}: {response.text}")
+        return None
+    
+    data = response.json()
+    return data
 
-# Configure Google Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Test API response
+st.write(fetch_stock_data("NVDA"))
+st.write(fetch_stock_data("MSFT"))
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Initialize session state variables
@@ -45,7 +55,7 @@ def get_stock_data(symbol):
 def get_stock_news(symbol):
     """Fetch recent news for a stock using Finnhub."""
     try:
-        news = finnhub_client.company_news(
+        news = finnhub_api_key.company_news(
             symbol,
             _from=(datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
             to=datetime.now().strftime("%Y-%m-%d"),
@@ -257,7 +267,7 @@ if st.session_state.stock1_data and st.session_state.stock2_data:
                     value=metric[2].format(val) if val else 'N/A'
                 )
 
-    with tab4:  # News Tab - FIXED
+    with tab4:  # News Tab 
         col1, col2 = st.columns(2)
         with col1:
             st.subheader(f"{st.session_state.stock1_symbol} News")
