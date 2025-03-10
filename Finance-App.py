@@ -8,6 +8,9 @@ import google.generativeai as genai
 import os
 import requests
 
+st.set_page_config(page_title="AI Stock Analyst", layout="wide")
+
+
 # Read API keys securely
 finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
 google_api_key = st.secrets["GOOGLE_API_KEY"]
@@ -193,7 +196,6 @@ def generate_chat_response(prompt):
         return f"Chat error: {str(e)}"
 
 # Streamlit UI
-st.set_page_config(page_title="AI Stock Analyst", layout="wide")
 st.title("🤖 AI-Powered Stock Comparison Tool")
 
 # Stock Input Section
