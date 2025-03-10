@@ -15,20 +15,6 @@ st.set_page_config(page_title="AI Stock Analyst", layout="wide")
 finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
 google_api_key = st.secrets["GOOGLE_API_KEY"]
 
-def fetch_stock_data(symbol):
-    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={finnhub_api_key}"
-    
-    response = requests.get(url)
-    if response.status_code != 200:
-        st.error(f"Error {response.status_code}: {response.text}")
-        return None
-    
-    data = response.json()
-    return data
-
-# Test API response
-st.write(fetch_stock_data("NVDA"))
-st.write(fetch_stock_data("MSFT"))
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Initialize session state variables
