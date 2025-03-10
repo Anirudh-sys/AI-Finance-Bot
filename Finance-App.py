@@ -1,5 +1,4 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -7,13 +6,16 @@ import finnhub
 import google.generativeai as genai
 import os
 import requests
+import time
 
 st.set_page_config(page_title="AI Stock Analyst", layout="wide")
-
 
 # Read API keys securely
 finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
 google_api_key = st.secrets["GOOGLE_API_KEY"]
+
+# Initialize Finnhub client
+finnhub_client = finnhub.Client(api_key=finnhub_api_key)
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -31,12 +33,65 @@ if "stock2_symbol" not in st.session_state:
 
 # Helper Functions
 def get_stock_data(symbol):
-    """Fetch stock data using yfinance."""
+    """Fetch stock data using Finnhub."""
     try:
-        stock = yf.Ticker(symbol)
-        if not stock.info:
-            raise ValueError(f"No data found for symbol: {symbol}")
-        return stock
+        # Get company profile
+        profile = finnhub_client.company_profile2(symbol=symbol)
+        if not profile:
+            raise ValueError(f"No company profile data found for symbol: {symbol}")
+            
+        # Get quote
+        quote = finnhub_client.quote(symbol)
+        if not quote:
+            raise ValueError(f"No quote data found for symbol: {symbol}")
+            
+        # Get basic financials
+        financials = finnhub_client.company_basic_financials(symbol, 'all')
+        if not financials:
+            raise ValueError(f"No financial data found for symbol: {symbol}")
+            
+        # Get historical candle data for charts
+        end_date = int(datetime.now().timestamp())
+        start_date = int((datetime.now() - timedelta(days=365)).timestamp())
+        candles = finnhub_client.stock_candles(symbol, 'D', start_date, end_date)
+        
+        # Create a consolidated data object
+        stock_data = {
+            'info': {
+                'symbol': symbol,
+                'shortName': profile.get('name', 'N/A'),
+                'marketCap': profile.get('marketCapitalization', 'N/A') * 1000000 if profile.get('marketCapitalization') else 'N/A',
+                'currentPrice': quote.get('c', 'N/A'),
+                'trailingPE': financials.get('metric', {}).get('peBasicExclExtraTTM', 'N/A'),
+                'forwardPE': financials.get('metric', {}).get('peNormalizedAnnual', 'N/A'),
+                'fiftyTwoWeekHigh': quote.get('h', 'N/A'),
+                'fiftyTwoWeekLow': quote.get('l', 'N/A'),
+                'dividendYield': financials.get('metric', {}).get('dividendYieldIndicatedAnnual', 0) / 100 if financials.get('metric', {}).get('dividendYieldIndicatedAnnual') else 0,
+                'sector': profile.get('finnhubIndustry', 'N/A'),
+                'beta': financials.get('metric', {}).get('beta', 'N/A'),
+            },
+            'candles': candles
+        }
+        
+        # Add additional method to mimic yfinance's history() function
+        def history(period=None):
+            if candles and candles.get('s') == 'ok':
+                df = pd.DataFrame({
+                    'Open': candles['o'],
+                    'High': candles['h'],
+                    'Low': candles['l'],
+                    'Close': candles['c'],
+                    'Volume': candles['v']
+                })
+                df.index = pd.to_datetime(candles['t'], unit='s')
+                return df
+            return pd.DataFrame()
+        
+        # Add the history method to our stock_data object
+        stock_data['history'] = history
+        
+        return type('StockData', (), stock_data)  # Create a class dynamically
+        
     except Exception as e:
         st.error(f"Error fetching data for {symbol}: {str(e)}")
         return None
@@ -44,7 +99,10 @@ def get_stock_data(symbol):
 def get_stock_news(symbol):
     """Fetch recent news for a stock using Finnhub."""
     try:
-        news = finnhub_api_key.company_news(
+        # Add delay to avoid rate limiting
+        time.sleep(0.5)
+        
+        news = finnhub_client.company_news(
             symbol,
             _from=(datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
             to=datetime.now().strftime("%Y-%m-%d"),
@@ -58,6 +116,10 @@ def create_price_chart(stock_data, symbol):
     """Create a candlestick chart for the stock."""
     try:
         hist = stock_data.history(period="1y")
+        if hist.empty:
+            st.warning(f"No historical data available for {symbol}")
+            return None
+            
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -193,8 +255,14 @@ with col2:
 
 if st.button("Analyze Stocks", type="primary"):
     if stock1 and stock2:
-        st.session_state.stock1_data = get_stock_data(stock1)
-        st.session_state.stock2_data = get_stock_data(stock2)
+        with st.spinner(f"Fetching data for {stock1}..."):
+            st.session_state.stock1_data = get_stock_data(stock1)
+            # Add delay to avoid rate limiting
+            time.sleep(1)
+        
+        with st.spinner(f"Fetching data for {stock2}..."):
+            st.session_state.stock2_data = get_stock_data(stock2)
+        
         st.session_state.stock1_symbol = stock1
         st.session_state.stock2_symbol = stock2
         st.session_state.chat_history = []
@@ -224,10 +292,12 @@ if st.session_state.stock1_data and st.session_state.stock2_data:
         col1, col2 = st.columns(2)
         with col1:
             fig = create_price_chart(st.session_state.stock1_data, st.session_state.stock1_symbol)
-            st.plotly_chart(fig, use_container_width=True)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         with col2:
             fig = create_price_chart(st.session_state.stock2_data, st.session_state.stock2_symbol)
-            st.plotly_chart(fig, use_container_width=True)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
         col1, col2 = st.columns(2)
@@ -246,13 +316,13 @@ if st.session_state.stock1_data and st.session_state.stock2_data:
                 val = st.session_state.stock1_data.info.get(metric[0])
                 st.metric(
                     label=f"{st.session_state.stock1_symbol} {metric[1]}",
-                    value=metric[2].format(val) if val else 'N/A'
+                    value=metric[2].format(val) if val and val != 'N/A' else 'N/A'
                 )
             with col2:
                 val = st.session_state.stock2_data.info.get(metric[0])
                 st.metric(
                     label=f"{st.session_state.stock2_symbol} {metric[1]}",
-                    value=metric[2].format(val) if val else 'N/A'
+                    value=metric[2].format(val) if val and val != 'N/A' else 'N/A'
                 )
 
     with tab4:  # News Tab 
@@ -262,24 +332,24 @@ if st.session_state.stock1_data and st.session_state.stock2_data:
             news1 = get_stock_news(st.session_state.stock1_symbol)
             if news1: # Check if news were retrieved
                 for article in news1:
-                    st.markdown(f"{article['headline']}")
-                    st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
-                    st.write(article['summary'])
+                    st.markdown(f"**{article.get('headline', 'No headline')}**")
+                    st.caption(f"{article.get('source', 'Unknown source')} - {datetime.fromtimestamp(article.get('datetime', 0)).strftime('%b %d')}")
+                    st.write(article.get('summary', 'No summary available'))
                     st.divider()
             else:
-                st.write(f"No news found for {st.session_state.stock1_symbol}") # Inform user if no news
+                st.write(f"No news found for {st.session_state.stock1_symbol}")
 
         with col2:
             st.subheader(f"{st.session_state.stock2_symbol} News")
             news2 = get_stock_news(st.session_state.stock2_symbol)
             if news2: # Check if news were retrieved
                 for article in news2:
-                    st.markdown(f"{article['headline']}")
-                    st.caption(f"{article['source']} - {datetime.fromtimestamp(article['datetime']).strftime('%b %d')}")
-                    st.write(article['summary'])
+                    st.markdown(f"**{article.get('headline', 'No headline')}**")
+                    st.caption(f"{article.get('source', 'Unknown source')} - {datetime.fromtimestamp(article.get('datetime', 0)).strftime('%b %d')}")
+                    st.write(article.get('summary', 'No summary available'))
                     st.divider()
             else:
-                st.write(f"No news found for {st.session_state.stock2_symbol}") # Inform user if no news
+                st.write(f"No news found for {st.session_state.stock2_symbol}")
 
     with tab5:
         st.subheader("Chat with AI")
